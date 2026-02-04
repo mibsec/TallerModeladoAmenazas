@@ -1,0 +1,76 @@
+version: "3.9"
+
+services:
+  # El Proxy Reverso (La puerta de entrada)
+  reverse-proxy:
+    image: traefik:v2.9
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - public-net
+      - service-mesh
+
+  # Servicio de Autenticación
+  auth-service:
+    image: node:14-alpine
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-dev_secret_do_not_use_in_prod}
+      - DB_HOST=users-db
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - service-mesh
+      - data-layer
+
+  # API Principal de Pagos
+  payment-core:
+    image: python:3.9
+    environment:
+      - DEBUG=True
+      - PAYMENT_GATEWAY_URL=${GATEWAY_URL}
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - service-mesh
+      - data-layer
+    depends_on:
+      - payment-worker
+
+  # Worker para procesar webhooks
+  payment-worker:
+    image: golang:1.18
+    environment:
+      - REDIS_URL=redis:6379
+    # Este servicio hace peticiones a URLs enviadas por usuarios (Webhooks)
+    networks:
+      - service-mesh
+
+  # Bases de Datos y Cache
+  users-db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_HOST_AUTH_METHOD: trust
+    networks:
+      - data-layer
+
+  redis-cache:
+    image: redis:alpine
+    networks:
+      - service-mesh
+
+networks:
+  public-net:
+  service-mesh:
+    internal: false
+  data-layer:
+    internal: true
