@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  reverse-proxy:
+    image: traefik:v2.9
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - public-net
+      - service-mesh
+
+  payment-core:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    environment:
+      - DEBUG=True
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - service-mesh
+      - data-layer
+
+  payment-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    networks:
+      - service-mesh
+
+  users-db:
+    image: postgres:13
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    networks:
+      - data-layer
+
+networks:
+  public-net:
+  service-mesh:
+    internal: false
+  data-layer:
+    internal: true
