@@ -1,0 +1,72 @@
+version: "3.9"
+
+services:
+  reverse-proxy:
+    image: traefik:v2.9
+    command:
+      # CORREGIDO: API insegura deshabilitada (ya no expone dashboard sin autenticacion)
+      - "--api=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      # REMOVIDO: puerto 8080 del dashboard de Traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - public-net
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+  payment-core:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    environment:
+      - DEBUG=False
+    # REMOVIDO: cap_add NET_ADMIN (privilegio innecesario)
+    networks:
+      - service-mesh
+      - data-layer
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+  payment-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    networks:
+      - service-mesh
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+  users-db:
+    image: postgres:13
+    environment:
+      # CORREGIDO: usar password real en vez de trust (autenticacion sin password)
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    networks:
+      - data-layer
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+
+networks:
+  public-net:
+  service-mesh:
+    # CORREGIDO: red interna para que los servicios no sean accesibles externamente
+    internal: true
+  data-layer:
+    internal: true
+
+volumes:
+  db_data:

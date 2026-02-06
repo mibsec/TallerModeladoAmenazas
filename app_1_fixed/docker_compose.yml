@@ -1,0 +1,41 @@
+version: "3.8"
+services:
+  shop-backend:
+    build: .
+    ports:
+      - "127.0.0.1:5000:5000"
+    # REMOVIDO: volumes con docker.sock (acceso innecesario al host)
+    # REMOVIDO: privileged: true (principio de minimo privilegio)
+    environment:
+      - DB_HOST=shop-db
+      - DB_PASS_FILE=/run/secrets/db_password
+    secrets:
+      - db_password
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  shop-db:
+    image: postgres:13
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    # REMOVIDO: exposicion del puerto 5432 al exterior
+    networks:
+      - backend
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+
+networks:
+  backend:
+    internal: true
+
+volumes:
+  db_data:
